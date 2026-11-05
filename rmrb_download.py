@@ -88,10 +88,10 @@ def get_current_date():
     """获取当前日期字符串"""
     return datetime.now().strftime("%Y-%m-%d")
 
-def get_pdf_urls(driver, main_url):
-    """获取所有PDF链接"""
+def get_pdf_urls(driver, main_url, date_override=None):
+    """获取所有PDF链接；指定了日期就抓那一天的版面，不从页面读日期"""
     pdf_urls = []
-    date_str = get_current_date()
+    date_str = date_override or get_current_date()
     
     try:
         # 访问人民日报网站
@@ -104,21 +104,24 @@ def get_pdf_urls(driver, main_url):
         )
         logging.info("页面基本加载完成")
         
-        # 尝试获取日期元素
-        try:
-            date_element = WebDriverWait(driver, 20).until(
-                EC.presence_of_element_located((By.CLASS_NAME, 'date'))
-            )
-            date_text = date_element.text
-            date_match = re.search(r'(\d{4})年(\d{2})月(\d{2})日', date_text)
-            
-            if date_match:
-                date_str = f"{date_match.group(1)}-{date_match.group(2)}-{date_match.group(3)}"
-                logging.info(f"从页面获取到日期: {date_str}")
-            else:
-                logging.warning("日期格式不匹配，使用当前日期")
-        except Exception as e:
-            logging.warning(f"获取日期元素失败: {e}, 使用当前日期")
+        # 尝试获取日期元素（指定了日期就不读页面上的日期，直接用指定的）
+        if date_override:
+            logging.info(f"使用指定日期: {date_str}")
+        else:
+            try:
+                date_element = WebDriverWait(driver, 20).until(
+                    EC.presence_of_element_located((By.CLASS_NAME, 'date'))
+                )
+                date_text = date_element.text
+                date_match = re.search(r'(\d{4})年(\d{2})月(\d{2})日', date_text)
+                
+                if date_match:
+                    date_str = f"{date_match.group(1)}-{date_match.group(2)}-{date_match.group(3)}"
+                    logging.info(f"从页面获取到日期: {date_str}")
+                else:
+                    logging.warning("日期格式不匹配，使用当前日期")
+            except Exception as e:
+                logging.warning(f"获取日期元素失败: {e}, 使用当前日期")
         
         # 尝试获取所有PDF链接
         try:
@@ -273,20 +276,23 @@ def download_and_merge_pdfs(date_str, pdf_urls):
         logging.warning("没有成功下载任何PDF文件")
         return False
 
-def download_rmrb_pdf():
-    """下载并合并人民日报PDF"""
-
-
+def download_rmrb_pdf(date_override=None):
+    """下载并合并人民日报PDF；指定了日期就抓那一天的版面"""
     driver = None
     try:
         logging.info("开始人民日报PDF下载任务")
         driver = setup_driver()
-        
-        # 人民日报网址
-        main_url = 'https://paper.people.com.cn/rmrb/'
-        
+
+        # 指定日期就直接打开那一天的版面页，否则打开首页（当天版面）
+        if date_override:
+            yyyymm = date_override[:4] + date_override[5:7]
+            dd = date_override[8:10]
+            main_url = f"https://paper.people.com.cn/rmrb/pc/layout/{yyyymm}/{dd}/node_01.html"
+        else:
+            main_url = 'https://paper.people.com.cn/rmrb/'
+
         # 获取日期和PDF链接
-        date_str, pdf_urls = get_pdf_urls(driver, main_url)
+        date_str, pdf_urls = get_pdf_urls(driver, main_url, date_override)
         
         # 下载并合并PDF
         result = download_and_merge_pdfs(date_str, pdf_urls)
@@ -318,11 +324,17 @@ if __name__ == "__main__":
     _parser = argparse.ArgumentParser(description="下载并合并当日人民日报 PDF")
     _parser.add_argument("--once", action="store_true",
                          help="只运行一次并退出，适合 GitHub Actions 定时任务")
+    _parser.add_argument("--date", default=None,
+                         help="指定日期，格式 YYYY-MM-DD；不指定就抓当天")
     _args = _parser.parse_args()
+
+    if _args.date and not re.match(r"^\d{4}-\d{2}-\d{2}$", _args.date):
+        logging.error(f"日期格式不对：{_args.date}，请用 YYYY-MM-DD")
+        sys.exit(1)
 
     if _args.once:
         logging.info("单次运行模式：下载一次后退出")
-        sys.exit(0 if download_rmrb_pdf() else 1)
+        sys.exit(0 if download_rmrb_pdf(_args.date) else 1)
 
     schedule.every().day.at("08:00").do(download_rmrb_pdf)  # 每天早上8点执行
 
