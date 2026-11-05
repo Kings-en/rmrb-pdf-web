@@ -143,6 +143,10 @@
       });
   }
   function bindDownload(btn) {
+    // 七牛地址带 ?attname=：服务器会直接返回“附件下载”，
+    // Safari 点了就下载，不用再走取回文件再保存的老办法，
+    // 68 MB 的大文件也不用先整个进内存。
+    if (btn.href.indexOf('attname=') !== -1) return;
     if (btn.getAttribute('data-bound')) return;
     btn.setAttribute('data-bound', '1');
     btn.addEventListener('click', function (ev) {
@@ -169,8 +173,8 @@
       li.querySelector('.tag').textContent = e.kind;
       li.querySelector('.item-meta').textContent = meta(e);
       li.querySelector('.view').href = e.file;
-      li.querySelector('.download').href = e.file;
-      li.querySelector('.download').setAttribute('download', e.file.split('/').pop());
+      li.querySelector('.download').href = e.download || e.file;
+      li.querySelector('.download').setAttribute('download', e.file.split('/').pop().split('?')[0]);
       bindDownload(li.querySelector('.download'));
       listEl.appendChild(li);
     });
@@ -180,8 +184,8 @@
     document.getElementById('latest-meta').textContent = meta(e);
     document.getElementById('latest-view').href = e.file;
     var dl = document.getElementById('latest-download');
-    dl.href = e.file;
-    dl.setAttribute('download', e.file.split('/').pop());
+    dl.href = e.download || e.file;
+    dl.setAttribute('download', e.file.split('/').pop().split('?')[0]);
     bindDownload(dl);
   }
 
