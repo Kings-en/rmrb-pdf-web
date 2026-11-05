@@ -6,6 +6,9 @@ requests==2.28.1
 # 文章汇总版爬虫用：解析文章页面、生成汇总 PDF
 beautifulsoup4>=4.12
 reportlab>=4.0
+# 把下载来的可变字体固定成常规字重：NotoSerifSC 可变字体的默认字重是 200（特细），
+# 直接用会比原来的宋体细很多，这里用 fonttools 把它固定到 400（常规）再用。
+fonttools>=4.0
 # 注意：原先写的是 PyPDF2==1.26.0，但代码里用的 PdfMerger / PdfReader
 # 是 PyPDF2 2.0 才改的名字，1.26 里只有 PdfFileMerger / PdfFileReader，
 # 按原 pin 装完导入就会报错，所以这里改成 >=2.0。
