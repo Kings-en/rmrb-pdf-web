@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-11-05 18:00",
+  "generated_at": "2026-11-05 18:18",
   "timezone": "Asia/Shanghai",
   "entries": [
     {
@@ -9,6 +9,14 @@
       "size_bytes": 72214153,
       "size": "68.9 MB",
       "pages": 20
+    },
+    {
+      "date": "2026-11-05",
+      "kind": "文章汇总版",
+      "file": "pdfs/2026-11-05-article.pdf",
+      "size_bytes": 934567,
+      "size": "0.9 MB",
+      "pages": 106
     }
   ]
 }
