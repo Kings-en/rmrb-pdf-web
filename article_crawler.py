@@ -474,20 +474,42 @@ def build_pdf(date, articles, font_path, out_path):
     full_width_pt = 566.93 - 28.35
     toc_width_pt = A4[0] - 50 * mm
 
-    def para_lines(text, font_size, width, first_width=None):
-        """一段文字按中文习惯预先断行，再拼成排版库里的一段（行间用 <br/> 连起来），
-        两端对齐、居中这些还是由排版库按段落样式完成。"""
+    _style_seq = [0]
+
+    def para_flowables(text, font_size, width, style, first_width=None, link=None, anchor=None):
+        """一段文字按中文习惯预先断行，每行一个独立段落交给排版库。
+
+        不能把几行用 <br/> 拼成一个段落：悬挂标点会让某一行超宽一点，
+        排版库二次断行时会在那行后面多留出一整行的空行，行间距就乱了。
+        每行单独成段就不会有这个毛病——单行段落二次断行只会把标点
+        悬挂在行末，不会多出一行。段前段后的空白只加在整段的第一行
+        和最后一行，行与行之间只按行距排。"""
         lines = split_lines(text, font_size, width, first_width)
-        return "<br/>".join(html.escape(line) for line in lines)
+        out = []
+        n = len(lines)
+        for k, line in enumerate(lines):
+            kw = {
+                "spaceBefore": style.spaceBefore if k == 0 else 0,
+                "spaceAfter": style.spaceAfter if k == n - 1 else 0,
+            }
+            if k > 0:
+                kw["firstLineIndent"] = 0
+            _style_seq[0] += 1
+            line_style = ParagraphStyle(f"{style.name}-行{_style_seq[0]}", parent=style, **kw)
+            body = html.escape(line)
+            if link:
+                body = f'<link href="{link}">{body}</link>'
+            if anchor and k == 0:
+                body = f'<a name="{anchor}"/>{body}'
+            out.append(Paragraph(body, line_style))
+        return out
 
     story = []
     # 目录：按网站顺序连续编号，只列标题，不标页码；有正文的条目做成可点链接
     story.append(Paragraph("人民日报文章目录", toc_title_style))
     for i, (_, title, _, _, paragraphs) in enumerate(articles, 1):
-        text = para_lines(f"{i}. {title}", 12, toc_width_pt)
-        if paragraphs:
-            text = f'<link href="#art{i}">{text}</link>'
-        story.append(Paragraph(text, toc_item_style))
+        link = f"#art{i}" if paragraphs else None
+        story.extend(para_flowables(f"{i}. {title}", 12, toc_width_pt, toc_item_style, link=link))
 
     # 正文：每篇文章另起一页
     story.append(NextPageTemplate("body"))
@@ -498,18 +520,18 @@ def build_pdf(date, articles, font_path, out_path):
         if i > 1:
             story.append(PageBreak())
         # 标题里放一个锚点，目录点进来就跳到这里
-        story.append(Paragraph(f'<a name="art{i}"/>{para_lines(title, 29, full_width_pt)}', title_style))
+        story.extend(para_flowables(title, 29, full_width_pt, title_style, anchor=f"art{i}"))
         if author:
-            story.append(Paragraph(para_lines(author, 10, full_width_pt), author_style))
+            story.extend(para_flowables(author, 10, full_width_pt, author_style))
         if citation:
-            story.append(Paragraph(para_lines(citation, 10, full_width_pt), citation_style))
+            story.extend(para_flowables(citation, 10, full_width_pt, citation_style))
         story.append(FullWidthRule(rule_left, 566.93 - frame_left_pt))
         for text in paragraphs:
             plain = text.replace(" ", "").replace("　", "")
             if len(plain) <= 22 and not any(c in text for c in "。！？；，：、…"):
-                story.append(Paragraph(para_lines(text, 12, body_width_pt), subhead_style))
+                story.extend(para_flowables(text, 12, body_width_pt, subhead_style))
             else:
-                story.append(Paragraph(para_lines(text, 12, body_width_pt, body_first_width_pt), body_style))
+                story.extend(para_flowables(text, 12, body_width_pt, body_style, body_first_width_pt))
 
     doc.build(story)
     logging.info(f"文章汇总版 PDF 已生成：{out_path}")
