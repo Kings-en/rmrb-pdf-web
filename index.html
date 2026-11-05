@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#c8102e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="人民日报 PDF">
+<meta name="description" content="每日人民日报 PDF：手机上按日期浏览、在线查看和下载，仅限学习使用。">
+<title>人民日报 PDF</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<style>
+  :root { --red:#c8102e; --ink:#1a1a1a; --muted:#666; --line:#e8e8e8; --bg:#f7f7f7; --card:#fff; }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif; background:var(--bg); color:var(--ink); }
+  header { background:var(--red); color:#fff; padding:calc(18px + env(safe-area-inset-top)) 18px 18px; }
+  header h1 { margin:0; font-size:22px; letter-spacing:2px; }
+  header p { margin:6px 0 0; font-size:13px; opacity:.9; }
+  main { max-width:720px; margin:0 auto; padding:16px 14px calc(28px + env(safe-area-inset-bottom)); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:14px; padding:16px; margin-bottom:14px; }
+  .latest-date { font-size:26px; font-weight:700; }
+  .latest-meta { color:var(--muted); font-size:13px; margin-top:4px; }
+  .row { display:flex; gap:10px; margin-top:14px; }
+  .btn { flex:1; display:block; text-align:center; text-decoration:none; padding:13px 10px; border-radius:10px; font-size:16px; font-weight:600; }
+  .btn-primary { background:var(--red); color:#fff; }
+  .btn-ghost { background:#fff; color:var(--red); border:1px solid var(--red); }
+  .search { display:flex; gap:10px; align-items:center; }
+  .search input { flex:1; min-width:0; font-size:16px; padding:11px 12px; border:1px solid #ccc; border-radius:10px; }
+  .search button { font-size:15px; padding:11px 14px; border:1px solid var(--red); background:var(--red); color:#fff; border-radius:10px; }
+  .list { list-style:none; margin:0; padding:0; }
+  .list li { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:10px; }
+  .item-top { display:flex; justify-content:space-between; align-items:baseline; gap:10px; }
+  .item-date { font-size:17px; font-weight:700; }
+  .tag { font-size:12px; color:var(--red); border:1px solid var(--red); border-radius:20px; padding:2px 8px; white-space:nowrap; }
+  .item-meta { color:var(--muted); font-size:13px; margin-top:4px; }
+  .item-actions { display:flex; gap:10px; margin-top:12px; }
+  .item-actions a { flex:1; text-align:center; text-decoration:none; padding:10px; border-radius:9px; font-size:15px; }
+  .view { background:#f0f0f0; color:var(--ink); }
+  .download { background:var(--red); color:#fff; }
+  .hint, .updated { color:var(--muted); font-size:13px; }
+  .empty { text-align:center; color:var(--muted); padding:28px 10px; }
+  footer { text-align:center; color:var(--muted); font-size:12px; padding:0 16px 24px; line-height:1.7; }
+</style>
+</head>
+<body>
+<header>
+  <h1>人民日报 PDF</h1>
+  <p>每日完整版 / 文章汇总版 · 手机上按日期查看和下载</p>
+</header>
+<main>
+  <section class="card" id="latest">
+    <div class="latest-date" id="latest-date">正在加载…</div>
+    <div class="latest-meta" id="latest-meta"></div>
+    <div class="row">
+      <a class="btn btn-primary" id="latest-view" href="#" target="_blank" rel="noopener">在线查看</a>
+      <a class="btn btn-ghost" id="latest-download" href="#" download>下载 PDF</a>
+    </div>
+  </section>
+
+  <section class="card">
+    <div class="search">
+      <input type="date" id="date-input" aria-label="选择日期">
+      <button type="button" id="date-go">查看</button>
+      <button type="button" id="date-clear" style="background:#fff;color:#333;border-color:#ccc;">全部</button>
+    </div>
+    <p class="hint" style="margin:10px 0 0;">选一个日期，只显示当天的报纸；点“全部”恢复列表。也可以把这个页面“添加到主屏幕”，以后像 App 一样打开。</p>
+  </section>
+
+  <ul class="list" id="list"></ul>
+  <p class="updated" id="updated"></p>
+</main>
+<footer>
+  仅限自己学习使用，不得用于商业活动。<br>
+  数据来自人民日报官网每日公开版面，由 GitHub Actions 每天定时抓取并合并。
+</footer>
+<script>
+(function () {
+  var listEl = document.getElementById('list');
+  var dateInput = document.getElementById('date-input');
+  var all = [];
+
+  function fmtDate(d) {
+    var week = ['周日','周一','周二','周三','周四','周五','周六'];
+    var dt = new Date(d + 'T12:00:00');
+    return d.slice(0,4) + '年' + d.slice(5,7) + '月' + d.slice(8,10) + '日 ' + week[dt.getDay()];
+  }
+  function meta(e) {
+    var parts = [e.kind, e.size];
+    if (e.pages) parts.push(e.pages + ' 页');
+    return parts.join(' · ');
+  }
+  function render(entries) {
+    listEl.innerHTML = '';
+    if (!entries.length) {
+      listEl.innerHTML = '<li class="empty">这一天还没有报纸，请换个日期试试。</li>';
+      return;
+    }
+    entries.forEach(function (e) {
+      var li = document.createElement('li');
+      li.innerHTML =
+        '<div class="item-top"><span class="item-date"></span><span class="tag"></span></div>' +
+        '<div class="item-meta"></div>' +
+        '<div class="item-actions">' +
+          '<a class="view" target="_blank" rel="noopener">在线查看</a>' +
+          '<a class="download" download>下载</a>' +
+        '</div>';
+      li.querySelector('.item-date').textContent = fmtDate(e.date);
+      li.querySelector('.tag').textContent = e.kind;
+      li.querySelector('.item-meta').textContent = meta(e);
+      li.querySelector('.view').href = e.file;
+      li.querySelector('.download').href = e.file;
+      li.querySelector('.download').setAttribute('download', e.file.split('/').pop());
+      listEl.appendChild(li);
+    });
+  }
+  function showLatest(e) {
+    document.getElementById('latest-date').textContent = fmtDate(e.date);
+    document.getElementById('latest-meta').textContent = meta(e);
+    document.getElementById('latest-view').href = e.file;
+    var dl = document.getElementById('latest-download');
+    dl.href = e.file;
+    dl.setAttribute('download', e.file.split('/').pop());
+  }
+
+  fetch('index.json', { cache: 'no-store' })
+    .then(function (r) { if (!r.ok) throw new Error('index.json 加载失败'); return r.json(); })
+    .then(function (data) {
+      all = (data.entries || []).slice().sort(function (a, b) { return b.date.localeCompare(a.date); });
+      if (!all.length) {
+        document.getElementById('latest-date').textContent = '暂无报纸';
+        document.getElementById('latest-meta').textContent = '定时任务还没有生成第一份 PDF。';
+        render([]);
+        return;
+      }
+      showLatest(all[0]);
+      render(all);
+      document.getElementById('updated').textContent = '目录更新时间：' + (data.generated_at || '') + '（北京时间）';
+    })
+    .catch(function () {
+      document.getElementById('latest-date').textContent = '加载失败';
+      document.getElementById('latest-meta').textContent = '请检查网络后刷新，或确认 index.json 已生成。';
+      render([]);
+    });
+
+  document.getElementById('date-go').addEventListener('click', function () {
+    var d = dateInput.value;
+    if (!d) return;
+    render(all.filter(function (e) { return e.date === d; }));
+  });
+  document.getElementById('date-clear').addEventListener('click', function () {
+    dateInput.value = '';
+    render(all);
+  });
+})();
+</script>
+</body>
+</html>
