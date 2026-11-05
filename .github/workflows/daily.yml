@@ -37,12 +37,16 @@ jobs:
           # 用 fonttools 把它固定到 400（常规字重），再交给爬虫用。
           python -c "from fontTools.ttLib import TTFont; from fontTools.varLib.instancer import instantiateVariableFont; f = TTFont('NotoSerifSC.ttf'); instantiateVariableFont(f, {'wght': 400}, inplace=True); f.save('NotoSerifSC-Regular.ttf')"
           ls -lh NotoSerifSC-Regular.ttf
+          curl -sL "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf" -o NotoSansSC.ttf
+          # 小标题用黑体：把可变字体固定到 700（粗体），再交给爬虫用。
+          python -c "from fontTools.ttLib import TTFont; from fontTools.varLib.instancer import instantiateVariableFont; f = TTFont('NotoSansSC.ttf'); instantiateVariableFont(f, {'wght': 700}, inplace=True); f.save('NotoSansSC-Bold.ttf')"
+          ls -lh NotoSansSC-Bold.ttf
 
       - name: 抓取当日文章并生成文章汇总版 PDF
         # 文章汇总失败也不让整个任务停下来：完整版照样归档提交，
         # 失败原因可以在这一步的日志里看到。
         continue-on-error: true
-        run: python article_crawler.py --font NotoSerifSC-Regular.ttf
+        run: python article_crawler.py --font NotoSerifSC-Regular.ttf --subhead-font NotoSansSC-Bold.ttf
 
       - name: 归档到 pdfs/ 并生成目录
         run: |
