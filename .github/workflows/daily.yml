@@ -1,0 +1,54 @@
+name: 每日抓取人民日报 PDF
+
+# 每天北京时间 08:00 运行（UTC 00:00），也可以在 Actions 页面手动点 Run workflow 立即跑一次。
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 拉取代码
+        uses: actions/checkout@v4
+
+      - name: 安装 Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: 安装 Chrome
+        uses: browser-actions/setup-chrome@v1
+
+      - name: 安装依赖
+        run: pip install -r requirements.txt
+
+      - name: 抓取并合并当日 PDF（单次运行，不进死循环）
+        run: python rmrb_download.py --once
+
+      - name: 归档到 pdfs/ 并生成目录
+        run: |
+          set -e
+          mkdir -p pdfs
+          # 爬虫输出在“人民日报下载/人民日报-YYYY-MM-DD-完整版.pdf”
+          for f in 人民日报下载/人民日报-*-完整版.pdf; do
+            [ -e "$f" ] || continue
+            date="$(echo "$f" | sed -E 's/.*-([0-9]{4}-[0-9]{2}-[0-9]{2})-完整版\.pdf/\1/')"
+            cp "$f" "pdfs/${date}.pdf"
+            echo "归档: $f -> pdfs/${date}.pdf"
+          done
+          python generate_index.py
+          ls -lh pdfs/
+
+      - name: 提交新 PDF 和目录
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add pdfs index.json
+          # 没有新文件就不提交，避免空提交
+          git diff --cached --quiet || git commit -m "更新人民日报 PDF $(date -u +%Y-%m-%d)"
+          git push
