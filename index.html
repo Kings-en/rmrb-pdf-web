@@ -26,7 +26,7 @@
   .btn-primary { background:var(--red); color:#fff; }
   .btn-ghost { background:#fff; color:var(--red); border:1px solid var(--red); }
   .search { display:flex; gap:10px; align-items:center; }
-  .search input { flex:1; min-width:0; font-size:16px; padding:11px 12px; border:1px solid #ccc; border-radius:10px; }
+  .search input { flex:1; min-width:0; font-size:16px; padding:11px 12px; border:1px solid #ccc; border-radius:10px; color:var(--ink); }
   .search button { font-size:15px; padding:11px 14px; border:1px solid var(--red); background:var(--red); color:#fff; border-radius:10px; }
   .list { list-style:none; margin:0; padding:0; }
   .list li { background:var(--card); border:1px solid var(--line); border-radius:12px; padding:14px; margin-bottom:10px; }
@@ -79,6 +79,15 @@
   var listEl = document.getElementById('list');
   var dateInput = document.getElementById('date-input');
   var all = [];
+
+  // 日期选择框默认填当天（北京时间），没选之前是灰色占位字，填上当天日期就正常显示了
+  (function () {
+    var now = new Date(Date.now() + 8 * 60 * 60 * 1000);
+    var y = now.getUTCFullYear();
+    var m = ('0' + (now.getUTCMonth() + 1)).slice(-2);
+    var d = ('0' + now.getUTCDate()).slice(-2);
+    dateInput.value = y + '-' + m + '-' + d;
+  })();
 
   function fmtDate(d) {
     var week = ['周日','周一','周二','周三','周四','周五','周六'];

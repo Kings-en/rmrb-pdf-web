@@ -20,8 +20,10 @@ pdfs/<日期>-article.pdf -> 文章汇总版。
 版面效果和之前的文章汇总版保持一致（以 2025-10-20 那份 228 页的汇总版为准）：
 - 没有封面，第一页就是目录，标题“人民日报文章目录”，条目按网站顺序连续编号，
   每条都能点、点进去跳到对应文章。
-- 正文每篇文章另起一页：标题大字居中，下面是作者（有的话）和《人民日报》引用行，
-  再画一条横线，然后是正文；正文宋体 12 号，段首空两格，右边留约 6 厘米空白当笔记区。
+- 正文每篇文章另起一页：标题、作者、引用行都按整页居中，标题大字（29 号），
+  引用行下面画一条通栏横线（从左边 10 毫米画到右边 10 毫米，穿过右边的笔记区）；
+  正文宋体 12 号、段首空两格，正文栏从左边 11 毫米起、宽约 144 毫米，
+  右边留约 5.5 厘米空白当笔记区。
 - 每页底下只写“第 x 页”。
 
 用法：
@@ -229,8 +231,8 @@ def build_pdf(date, articles, font_path, out_path):
     from reportlab.pdfbase.ttfonts import TTFont
     from reportlab.platypus import (
         BaseDocTemplate,
+        Flowable,
         Frame,
-        HRFlowable,
         NextPageTemplate,
         PageBreak,
         PageTemplate,
@@ -244,9 +246,20 @@ def build_pdf(date, articles, font_path, out_path):
 
     black = HexColor("#000000")
     date_str = date.strftime("%Y-%m-%d")
-    # 目录页：通栏；正文页：窄栏，右边留约 6 厘米空白当笔记区
-    toc_frame = Frame(25 * mm, 15 * mm, A4[0] - 50 * mm, A4[1] - 30 * mm, id="toc")
-    body_frame = Frame(16.5 * mm, 19 * mm, 136 * mm, A4[1] - 38 * mm, id="body")
+    # 版面尺寸（按原版样例 PDF 实测）：
+    # 目录页通栏；正文页的正文栏从左边 11 毫米起、宽约 144 毫米，右边留约 5.5 厘米空白当笔记区；
+    # 但标题、作者、引用行和横线是按整页排的——标题按整页居中，横线从左边 10 毫米画到右边 10 毫米。
+    # 注意：Frame 默认四边各有 6pt 内边距，内容实际从框线往里 6pt 开始画；
+    # 这里全设成 0，让内容就从上面算好的位置开始，和原版量出来的尺寸对得上。
+    toc_frame = Frame(25 * mm, 15 * mm, A4[0] - 50 * mm, A4[1] - 30 * mm, id="toc",
+                      leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
+    body_frame = Frame(11 * mm, 19 * mm, 144 * mm, A4[1] - 38 * mm, id="body",
+                       leftPadding=0, rightPadding=0, topPadding=0, bottomPadding=0)
+    # 正文栏左缘 11 毫米，右缘 155 毫米；通栏横线从 10 毫米画到 200 毫米
+    frame_left_pt = 11 * mm
+    frame_right_pt = frame_left_pt + 144 * mm
+    rule_left = 28.35 - frame_left_pt
+    rule_right = frame_right_pt - 566.93
 
     def footer(canvas, doc):
         """每页页脚：只写“第 x 页”，居中。"""
@@ -270,12 +283,17 @@ def build_pdf(date, articles, font_path, out_path):
                                      alignment=TA_CENTER, spaceAfter=18, wordWrap="CJK")
     toc_item_style = ParagraphStyle("目录条目", fontName="NotoSerifSC", fontSize=12, leading=22,
                                     wordWrap="CJK")
-    title_style = ParagraphStyle("标题", fontName="NotoSerifSC", fontSize=26, leading=36,
-                                 alignment=TA_CENTER, spaceAfter=10, wordWrap="CJK")
+    # 标题、作者、引用行按整页居中：用负缩进把段落框从正文栏扩到通栏（10 毫米到 200 毫米），
+    # 这样居中的中心点就是整页中心，和原版一样。
+    title_style = ParagraphStyle("标题", fontName="NotoSerifSC", fontSize=29, leading=38,
+                                 alignment=TA_CENTER, spaceAfter=10, wordWrap="CJK",
+                                 leftIndent=rule_left, rightIndent=rule_right)
     author_style = ParagraphStyle("作者", fontName="NotoSerifSC", fontSize=10, leading=14,
-                                  alignment=TA_CENTER, spaceAfter=4, wordWrap="CJK")
+                                  alignment=TA_CENTER, spaceAfter=4, wordWrap="CJK",
+                                  leftIndent=rule_left, rightIndent=rule_right)
     citation_style = ParagraphStyle("引用行", fontName="NotoSerifSC", fontSize=10, leading=14,
-                                    alignment=TA_CENTER, spaceAfter=8, wordWrap="CJK")
+                                    alignment=TA_CENTER, spaceAfter=8, wordWrap="CJK",
+                                    leftIndent=rule_left, rightIndent=rule_right)
     body_style = ParagraphStyle("正文", fontName="NotoSerifSC", fontSize=12, leading=21,
                                 alignment=TA_JUSTIFY, firstLineIndent=24, spaceAfter=8,
                                 wordWrap="CJK")
@@ -283,6 +301,26 @@ def build_pdf(date, articles, font_path, out_path):
     subhead_style = ParagraphStyle("小标题", fontName="NotoSerifSC", fontSize=12, leading=21,
                                    alignment=TA_CENTER, spaceBefore=6, spaceAfter=6,
                                    wordWrap="CJK")
+
+    class FullWidthRule(Flowable):
+        """引用行下面的通栏横线：从页面左边 10 毫米画到右边 10 毫米，
+        穿过右边的笔记区，和原版一样。画在正文栏里，但线伸到栏外——
+        排版框不会裁剪画出去的内容，所以这样画没问题。"""
+
+        def __init__(self, x0, x1):
+            super().__init__()
+            self.x0, self.x1 = x0, x1
+
+        def wrap(self, avail_width, avail_height):
+            # 占 12pt 高：上面留 2pt、线 0.5pt、下面留约 10pt 再接正文
+            return (avail_width, 12)
+
+        def draw(self):
+            self.canv.saveState()
+            self.canv.setStrokeColor(black)
+            self.canv.setLineWidth(0.5)
+            self.canv.line(self.x0, 9.5, self.x1, 9.5)
+            self.canv.restoreState()
 
     story = []
     # 目录：按网站顺序连续编号，只列标题，不标页码；有正文的条目做成可点链接
@@ -307,7 +345,7 @@ def build_pdf(date, articles, font_path, out_path):
             story.append(Paragraph(html.escape(author), author_style))
         if citation:
             story.append(Paragraph(html.escape(citation), citation_style))
-        story.append(HRFlowable(width="100%", thickness=0.5, color=black, spaceAfter=10))
+        story.append(FullWidthRule(rule_left, 566.93 - frame_left_pt))
         for text in paragraphs:
             plain = text.replace(" ", "").replace("　", "")
             if len(plain) <= 22 and not any(c in text for c in "。！？；，：、…"):
