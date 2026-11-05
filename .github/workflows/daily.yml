@@ -24,9 +24,6 @@ jobs:
       - name: 安装 Chrome
         uses: browser-actions/setup-chrome@v1
 
-      - name: 安装与 Chrome 版本匹配的 ChromeDriver（给 Selenium 备用）
-        uses: browser-actions/setup-chromedriver@v1
-
       - name: 安装依赖
         run: pip install -r requirements.txt
 
