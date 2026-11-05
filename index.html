@@ -99,6 +99,57 @@
     if (e.pages) parts.push(e.pages + ' 页');
     return parts.join(' · ');
   }
+  // 点“下载”时先把文件取回来再触发保存：Safari 会忽略链接上的 download 属性，
+  // 直接把 PDF 在浏览器里打开、不下载；用文件内容生成一个临时链接再点它，
+  // Safari 才会真的保存到“文件”里。下载过程中按钮上显示进度，失败就退回
+  // 直接打开 PDF（和原来一样）。
+  function downloadFile(url, filename, btn) {
+    var original = btn.textContent;
+    btn.textContent = '正在准备下载…';
+    btn.style.pointerEvents = 'none';
+    fetch(url)
+      .then(function (r) {
+        if (!r.ok) throw new Error('下载失败');
+        var total = parseInt(r.headers.get('Content-Length') || '0', 10);
+        if (!r.body || !r.body.getReader) return r.blob();
+        var reader = r.body.getReader();
+        var chunks = [];
+        var received = 0;
+        function pump() {
+          return reader.read().then(function (res) {
+            if (res.done) return new Blob(chunks);
+            chunks.push(res.value);
+            received += res.value.length;
+            if (total) btn.textContent = '正在下载…' + Math.round(received / total * 100) + '%';
+            return pump();
+          });
+        }
+        return pump();
+      })
+      .then(function (blob) {
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 1000);
+      })
+      .catch(function () {
+        window.open(url, '_blank');
+      })
+      .then(function () {
+        btn.textContent = original;
+        btn.style.pointerEvents = '';
+      });
+  }
+  function bindDownload(btn) {
+    if (btn.getAttribute('data-bound')) return;
+    btn.setAttribute('data-bound', '1');
+    btn.addEventListener('click', function (ev) {
+      ev.preventDefault();
+      downloadFile(btn.href, btn.getAttribute('download') || '人民日报.pdf', btn);
+    });
+  }
   function render(entries) {
     listEl.innerHTML = '';
     if (!entries.length) {
@@ -120,6 +171,7 @@
       li.querySelector('.view').href = e.file;
       li.querySelector('.download').href = e.file;
       li.querySelector('.download').setAttribute('download', e.file.split('/').pop());
+      bindDownload(li.querySelector('.download'));
       listEl.appendChild(li);
     });
   }
@@ -130,6 +182,7 @@
     var dl = document.getElementById('latest-download');
     dl.href = e.file;
     dl.setAttribute('download', e.file.split('/').pop());
+    bindDownload(dl);
   }
 
   fetch('index.json', { cache: 'no-store' })
