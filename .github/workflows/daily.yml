@@ -1,10 +1,17 @@
 name: 每日抓取人民日报 PDF
 
 # 每天北京时间 08:00 运行（UTC 00:00），也可以在 Actions 页面手动点 Run workflow 立即跑一次。
+# 手动运行时可以填一个日期（格式 YYYY-MM-DD，例如 2026-11-04），只抓那一天的
+# 两个版本；不填就抓当天。手动运行只有仓库管理员能点，网页上不提供这个入口。
 on:
   schedule:
     - cron: "0 0 * * *"
   workflow_dispatch:
+    inputs:
+      date:
+        description: "指定日期（YYYY-MM-DD），不填就抓当天"
+        required: false
+        default: ""
 
 permissions:
   contents: write
@@ -28,7 +35,12 @@ jobs:
         run: pip install -r requirements.txt
 
       - name: 抓取并合并当日 PDF（单次运行，不进死循环）
-        run: python rmrb_download.py --once
+        env:
+          FETCH_DATE: ${{ inputs.date }}
+        run: |
+          DATE_ARG=""
+          if [ -n "$FETCH_DATE" ]; then DATE_ARG="--date $FETCH_DATE"; fi
+          python rmrb_download.py --once $DATE_ARG
 
       - name: 下载中文字体（文章汇总版 PDF 排版用）
         run: |
@@ -46,21 +58,12 @@ jobs:
         # 文章汇总失败也不让整个任务停下来：完整版照样归档提交，
         # 失败原因可以在这一步的日志里看到。
         continue-on-error: true
-        run: python article_crawler.py --font NotoSerifSC-Regular.ttf --subhead-font NotoSansSC-Bold.ttf
-
-      - name: 上传 PDF 到七牛云
-        # 密钥存在仓库 Secrets 里，不会出现在日志和代码里；
-        # 没配密钥就跳过上传，index.json 仍用 GitHub Pages 的相对地址。
         env:
-          QINIU_ACCESS_KEY: ${{ secrets.QINIU_ACCESS_KEY }}
-          QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
-          QINIU_BUCKET: ${{ secrets.QINIU_BUCKET }}
+          FETCH_DATE: ${{ inputs.date }}
         run: |
-          if [ -z "$QINIU_ACCESS_KEY" ] || [ -z "$QINIU_SECRET_KEY" ] || [ -z "$QINIU_BUCKET" ]; then
-            echo "没有配置七牛密钥，跳过上传"
-          else
-            python upload_to_qiniu.py
-          fi
+          DATE_ARG=""
+          if [ -n "$FETCH_DATE" ]; then DATE_ARG="--date $FETCH_DATE"; fi
+          python article_crawler.py --font NotoSerifSC-Regular.ttf --subhead-font NotoSansSC-Bold.ttf $DATE_ARG
 
       - name: 归档到 pdfs/ 并生成目录
         env:
@@ -84,6 +87,21 @@ jobs:
           done
           python generate_index.py
           ls -lh pdfs/
+
+      - name: 上传 PDF 到七牛云
+        # 注意顺序：必须在归档之后，pdfs/ 里才有刚抓到的文件；
+        # 以前放在归档前面，靠的是仓库里还存着旧 PDF，仓库删空后就传不上去了。
+        # 密钥存在仓库 Secrets 里，不会出现在日志和代码里。
+        env:
+          QINIU_ACCESS_KEY: ${{ secrets.QINIU_ACCESS_KEY }}
+          QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
+          QINIU_BUCKET: ${{ secrets.QINIU_BUCKET }}
+        run: |
+          if [ -z "$QINIU_ACCESS_KEY" ] || [ -z "$QINIU_SECRET_KEY" ] || [ -z "$QINIU_BUCKET" ]; then
+            echo "没有配置七牛密钥，跳过上传"
+          else
+            python upload_to_qiniu.py
+          fi
 
       - name: 提交目录
         run: |
