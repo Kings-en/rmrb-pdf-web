@@ -1,5 +1,7 @@
-selenium==4.8.2
-webdriver-manager==3.8.3
+# Selenium 升到 4.21 以上：自带的驱动管理器才会走 Chrome for Testing 新地址，
+# 自动下载与当前 Chrome 匹配的驱动；4.8.2 时代的驱动管理器走旧地址，
+# 新版 Chrome 在那里找不到驱动。webdriver-manager 已经不用了，直接删掉。
+selenium>=4.21,<5
 requests==2.28.1
 # 注意：原先写的是 PyPDF2==1.26.0，但代码里用的 PdfMerger / PdfReader
 # 是 PyPDF2 2.0 才改的名字，1.26 里只有 PdfFileMerger / PdfFileReader，

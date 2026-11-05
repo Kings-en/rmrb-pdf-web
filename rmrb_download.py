@@ -9,7 +9,6 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
 from PyPDF2 import PdfMerger, PdfReader
 import os
 import logging
@@ -58,8 +57,11 @@ def setup_driver():
         options.add_experimental_option("excludeSwitches", ["enable-automation"])
         options.add_experimental_option('useAutomationExtension', False)
         
-        # 自动下载和管理ChromeDriver
-        service = Service(ChromeDriverManager().install())
+        # 不再用 webdriver-manager：它走旧的 chromedriver 下载地址，
+        # 新版 Chrome（115 之后）那里没有对应的驱动，会直接报错。
+        # 改用 Selenium 自带的驱动管理器：Service() 不传路径时，
+        # 它会自动下载与当前 Chrome 版本匹配的驱动（走 Chrome for Testing 新地址）。
+        service = Service()
         
         driver = webdriver.Chrome(service=service, options=options)
         
