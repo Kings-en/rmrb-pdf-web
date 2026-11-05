@@ -143,10 +143,10 @@
       });
   }
   function bindDownload(btn) {
-    // 七牛地址带 ?attname=：服务器会直接返回“附件下载”，
-    // Safari 点了就下载，不用再走取回文件再保存的老办法，
-    // 68 MB 的大文件也不用先整个进内存。
-    if (btn.href.indexOf('attname=') !== -1) return;
+    // 不要只靠 ?attname=：七牛确实会返回 Content-Disposition: attachment，
+    // Chrome 点了会弹出下载，但 iOS Safari 还是直接打开 PDF 预览。
+    // 所以所有下载都走取回文件再保存：先把文件取回来生成临时链接再点它，
+    // Safari 才会真的保存到“文件”里（之前在 GitHub Pages 上验证过这招管用）。
     if (btn.getAttribute('data-bound')) return;
     btn.setAttribute('data-bound', '1');
     btn.addEventListener('click', function (ev) {
