@@ -1,1 +1,14 @@
-{"entries":[],"generated_at":"2026-11-05 17:21","timezone":"Asia/Shanghai"}
+{
+  "generated_at": "2026-11-05 18:00",
+  "timezone": "Asia/Shanghai",
+  "entries": [
+    {
+      "date": "2026-11-05",
+      "kind": "完整版",
+      "file": "pdfs/2026-11-05.pdf",
+      "size_bytes": 72214153,
+      "size": "68.9 MB",
+      "pages": 20
+    }
+  ]
+}
