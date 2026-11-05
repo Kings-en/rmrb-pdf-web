@@ -48,7 +48,23 @@ jobs:
         continue-on-error: true
         run: python article_crawler.py --font NotoSerifSC-Regular.ttf --subhead-font NotoSansSC-Bold.ttf
 
+      - name: 上传 PDF 到七牛云
+        # 密钥存在仓库 Secrets 里，不会出现在日志和代码里；
+        # 没配密钥就跳过上传，index.json 仍用 GitHub Pages 的相对地址。
+        env:
+          QINIU_ACCESS_KEY: ${{ secrets.QINIU_ACCESS_KEY }}
+          QINIU_SECRET_KEY: ${{ secrets.QINIU_SECRET_KEY }}
+          QINIU_BUCKET: ${{ secrets.QINIU_BUCKET }}
+        run: |
+          if [ -z "$QINIU_ACCESS_KEY" ] || [ -z "$QINIU_SECRET_KEY" ] || [ -z "$QINIU_BUCKET" ]; then
+            echo "没有配置七牛密钥，跳过上传"
+          else
+            python upload_to_qiniu.py
+          fi
+
       - name: 归档到 pdfs/ 并生成目录
+        env:
+          QINIU_DOMAIN: ${{ secrets.QINIU_DOMAIN }}
         run: |
           set -e
           mkdir -p pdfs
@@ -69,11 +85,13 @@ jobs:
           python generate_index.py
           ls -lh pdfs/
 
-      - name: 提交新 PDF 和目录
+      - name: 提交目录
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add pdfs index.json
+          # PDF 不再提交进仓库了：文件存在七牛云，仓库只留 index.json，
+          # 不然每天 70 MB，仓库很快就超过 GitHub 建议的 1 GB。
+          git add index.json
           # 没有新文件就不提交，避免空提交
           git diff --cached --quiet || git commit -m "更新人民日报 PDF $(date -u +%Y-%m-%d)"
           git push
