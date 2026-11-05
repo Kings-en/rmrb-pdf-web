@@ -47,7 +47,7 @@ def main():
                 "pages": page_count(path),
             })
 
-    entries.sort(key=lambda e: e["date"], reverse=True)
+    entries.sort(key=lambda e: (e["date"], 1 if e["kind"] == "完整版" else 0), reverse=True)
     beijing = timezone(timedelta(hours=8))
     data = {
         "generated_at": datetime.now(beijing).strftime("%Y-%m-%d %H:%M"),

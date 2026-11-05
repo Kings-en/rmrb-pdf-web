@@ -13,7 +13,17 @@
 3. 等一两分钟，打开 `https://kings-en.github.io/rmrb-pdf-web/` 就能看到手机版页面：最新一期在最上面，可以按日期查、在线查看、下载 PDF。
 4. 在手机浏览器里点“添加到主屏幕”，以后就像 App 一样打开。
 
-每天更新是怎么来的：`.github/workflows/daily.yml` 每天北京时间 08:00（UTC 00:00）自动跑一次 `python rmrb_download.py --once`，把新抓到的完整版 PDF 归档到 `pdfs/YYYY-MM-DD.pdf`，再用 `generate_index.py` 更新 `index.json`，提交回仓库，网页随即更新。也可以在仓库 **Actions** 页面点 **Run workflow** 手动跑一次。
+每天更新是怎么来的：`.github/workflows/daily.yml` 每天北京时间 08:00（UTC 00:00）自动跑一次，先跑 `python rmrb_download.py --once` 抓完整版 PDF，再跑 `python article_crawler.py` 抓当日全部版面文章、生成文章汇总版 PDF，两个都归档到 `pdfs/`（完整版 `YYYY-MM-DD.pdf`，文章汇总版 `YYYY-MM-DD-article.pdf`），再用 `generate_index.py` 更新 `index.json`，提交回仓库，网页随即更新。也可以在仓库 **Actions** 页面点 **Run workflow** 手动跑一次。
+
+## 文章汇总版（来自 article-crawler 分支）
+
+原仓库 `article-crawler` 分支的功能也已经接进来了，每天和完整版一起自动生成：
+
+- `article_crawler.py`：自动识别当天日期（当天报纸还没出就回退到昨天），抓全部版面的文章链接，多线程下载每篇文章的正文，再用 reportlab 生成一份带目录和页码的 PDF，存在 `人民日报下载/人民日报-YYYY-MM-DD-文章汇总版.pdf`，工作流归档为 `pdfs/YYYY-MM-DD-article.pdf`，网页上显示为“文章汇总版”。
+- 网页上同一天会同时列出完整版和文章汇总版，最新一期优先显示完整版。
+- 注意：原分支里那个旧脚本（`rmrb_merged.py`）有两个问题，这里都修了：它把日期写死成 2025-10-19，只能抓那一天；而且只抓头版一个版面、只保存成 txt，不生成 PDF。现在的版本按上面这套逻辑重写过。
+- 文章汇总版排版用的中文字体是 Noto Sans SC，工作流每次运行时下载（`NotoSansSC.ttf`），本地跑之前也要先准备好字体文件，见 `article_crawler.py` 开头的说明。
+- 文章汇总那一步如果失败，不会拖垮整个任务：完整版照样归档提交，失败原因可以在那次运行的日志里看到。
 
 注意：
 - GitHub Pages 只能放静态网页，爬虫本身不在网页里跑，是在 GitHub Actions 里跑的。
@@ -27,6 +37,7 @@
 - 每天早上8点定时执行任务。
 - 支持日志记录和错误处理。
 - 手机网页：按日期浏览、在线查看、下载 PDF。
+- 每天自动生成文章汇总版 PDF：当日全部版面文章正文合并成一份，带目录和页码。
 
 ## 安装（本地运行爬虫）
 
@@ -43,9 +54,7 @@
    pip install -r requirements.txt
    ```
 
-3. 确保你的系统上已经安装了 `Google Chrome` 和适配的 `ChromeDriver`。
-
-如果未安装 ChromeDriver，请使用 WebDriver Manager自动安装。
+3. 确保你的系统上已经安装了 `Google Chrome`，驱动由 Selenium 自带的驱动管理器自动下载匹配版本，不用再手动装 ChromeDriver，也不用 webdriver-manager。
 
 ## 配置
 
@@ -69,12 +78,19 @@
 python rmrb_download.py --once
 ```
 
+只跑文章汇总版（测试用，字体文件要先准备好）：
+
+```bash
+python article_crawler.py --font ./NotoSansSC.ttf
+```
+
 ## 文件说明
 
 - `index.html`：手机网页（最新一期、按日期查询、在线查看、下载）。
 - `index.json`：报纸目录，由 `generate_index.py` 生成，网页读取它来列出报纸。
 - `generate_index.py`：扫描 `pdfs/` 生成 `index.json`。
-- `pdfs/`：每日完整版 PDF，按 `YYYY-MM-DD.pdf` 存放。
+- `pdfs/`：每日完整版 PDF（`YYYY-MM-DD.pdf`）和文章汇总版 PDF（`YYYY-MM-DD-article.pdf`）。
+- `article_crawler.py`：文章汇总版爬虫，抓当日全部版面文章正文并生成汇总 PDF。
 - `manifest.webmanifest` / `icon.svg`：添加到主屏幕用的配置和图标。
 - `.github/workflows/daily.yml`：每天北京时间 08:00 自动抓取并提交。
 - `rmrb_download.py`：原爬虫，新增 `--once` 单次运行模式。

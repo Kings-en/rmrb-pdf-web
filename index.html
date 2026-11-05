@@ -126,14 +126,17 @@
   fetch('index.json', { cache: 'no-store' })
     .then(function (r) { if (!r.ok) throw new Error('index.json 加载失败'); return r.json(); })
     .then(function (data) {
-      all = (data.entries || []).slice().sort(function (a, b) { return b.date.localeCompare(a.date); });
+      all = (data.entries || []).slice().sort(function (a, b) { return b.date.localeCompare(a.date) || (a.kind === '完整版' ? -1 : 1); });
       if (!all.length) {
         document.getElementById('latest-date').textContent = '暂无报纸';
         document.getElementById('latest-meta').textContent = '定时任务还没有生成第一份 PDF。';
         render([]);
         return;
       }
-      showLatest(all[0]);
+      // 最新一期优先显示完整版，同一天有文章汇总版时它排在列表里
+      var latest = null;
+      for (var i = 0; i < all.length; i++) { if (all[i].kind === '完整版') { latest = all[i]; break; } }
+      showLatest(latest || all[0]);
       render(all);
       document.getElementById('updated').textContent = '目录更新时间：' + (data.generated_at || '') + '（北京时间）';
     })
