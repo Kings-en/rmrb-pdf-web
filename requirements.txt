@@ -1,0 +1,8 @@
+selenium==4.8.2
+webdriver-manager==3.8.3
+requests==2.28.1
+# 注意：原先写的是 PyPDF2==1.26.0，但代码里用的 PdfMerger / PdfReader
+# 是 PyPDF2 2.0 才改的名字，1.26 里只有 PdfFileMerger / PdfFileReader，
+# 按原 pin 装完导入就会报错，所以这里改成 >=2.0。
+PyPDF2>=2.0,<4
+schedule==1.1.0
