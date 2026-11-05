@@ -24,6 +24,8 @@ pdfs/<日期>-article.pdf -> 文章汇总版。
   引用行下面画一条通栏横线（从左边 10 毫米画到右边 10 毫米，穿过右边的笔记区）；
   正文宋体 12 号、段首空两格，正文栏从左边 11 毫米起、宽约 144 毫米，
   右边留约 5.5 厘米空白当笔记区。
+- 正文按中文排版习惯处理：两端对齐；标点粘住前后字，不让标点单独成行、
+  不让句号、逗号等标点出现在行首，也不让左引号、左括号出现在行末。
 - 每页底下只写“第 x 页”。
 
 用法：
@@ -70,6 +72,137 @@ HEADERS = {
 
 # 输出目录和文件名：和完整版爬虫保持同一套目录
 OUTPUT_DIR = "人民日报下载"
+
+# 中文排版禁则：排版库自带的禁则表是按日文列的，缺了中文全角标点
+# （，。；：？！”’》这些不在表里），而且它只管“行首”，不管“行末”，
+# 连续的闭标点（比如 。”）断在行当中也管不了。所以不在库里修，
+# 改成自己先断行：按中文习惯把每段文字预先断成行再交给排版库。
+# 行首禁则：不能出现在行首的标点
+# （破折号、省略号也算：它们不能拆开、不能出现在行首，行末出现是规范的）
+_CLOSING = set("，。、；：？！…—”’）】》〉」』〗〕％%．.,;:?!)]")
+# 行末禁则：不能出现在行末的标点（左引号、左括号这类）
+_OPENING = set("“‘（［｛【《〈「『〖〔([{")
+# 连字号：人名中间的 ·、数字之间的 ～，前后都不能断开
+_BOTH = set("·～~")
+
+# 宽度缓存：按（单元，字号）记，避免反复量同一批字
+_WIDTH_CACHE = {}
+
+
+def _unit_width(unit, font_size):
+    """量一个单元在指定字号下的宽度（pt），和排版库用的同一把尺子。"""
+    key = (unit, font_size)
+    w = _WIDTH_CACHE.get(key)
+    if w is None:
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+        try:
+            w = stringWidth(unit, "NotoSerifSC", font_size)
+        except Exception:
+            w = font_size * len(unit)
+        if not w or w <= 0:
+            w = font_size * len(unit)
+        _WIDTH_CACHE[key] = w
+    return w
+
+
+def _tokenize(text):
+    """把文字切成不可拆的单元：连续的英文字母/数字（含小数点、百分号、
+    词中的撇号，比如 25%、5.5、C919、don't）算一个单元，拆开就不好读；
+    其他字（汉字、标点）各算一个单元。"""
+    units = []
+    i, n = 0, len(text)
+    while i < n:
+        ch = text[i]
+        if ch.isascii() and ch.isalnum():
+            j = i
+            while j < n:
+                c = text[j]
+                if c.isascii() and c.isalnum():
+                    j += 1
+                elif c in ".’'" and j + 1 < n and text[j + 1].isascii() and text[j + 1].isalnum():
+                    j += 1  # 小数点、词中撇号留在词里
+                elif c == "%":
+                    j += 1
+                    break
+                else:
+                    break
+            units.append(text[i:j])
+            i = j
+        else:
+            units.append(ch)
+            i += 1
+    return units
+
+
+def split_lines(text, font_size, width, first_width=None, margin=0.05):
+    """按中文排版习惯把一段文字预先断成行，返回行列表：
+
+    - 两端对齐由排版库完成，这里只负责断行位置；每行留 0.05pt 余量，
+      交给排版库时不会再被二次断行（余量要小，不然一行会少排一个字）。
+    - 行要排满：不断行不断出来的行都排到栏宽，两端自然对齐；只有
+      段末行可以短。闭标点放不下时允许它悬挂在栏外（中文排版里标点
+      悬挂是规范做法），不断行就不会出现参差不齐的右沿。
+    - 行首禁则：，。、；：？！等闭标点不能出现在行首；放不下的闭标点
+      悬挂在上一行行末（连续的闭标点比如 。”）整个带下去，不拆开。
+      破折号、省略号不能拆开、不能出现在行首，行末出现是规范的。
+    - 行末禁则：“‘（等开标点不能留在行末；断行时把它留到下一行开头。
+      人名中间的 ·、数字之间的 ～ 前后都不能断开，整组一起带下去。
+    - 上面几条也保证了标点不会单独成行。
+    width 是正文行的可用宽度（pt），first_width 是首行可用宽度
+    （有首行缩进时比 width 小）；margin 是留给排版库的余量。"""
+    if first_width is None:
+        first_width = width
+    units = _tokenize(text)
+    widths = [_unit_width(u, font_size) for u in units]
+    n = len(units)
+    lines, i = [], 0
+    first = True
+    while i < n:
+        avail = (first_width if first else width) - margin
+        first = False
+        j, used = i, 0.0
+        end = None
+        while j < n:
+            u, w = units[j], widths[j]
+            if u in _BOTH and j > i and j + 1 < n:
+                # “字·字” / “数～数” 是一组，不能从中间断开：这个字和下
+                # 一个字都得放得下，否则把前一个字一起带到下一行
+                if used + w + widths[j + 1] > avail:
+                    end = j - 1 if j - 1 > i else j
+                    break
+            if used + w > avail:
+                break
+            used += w
+            j += 1
+        if end is None:
+            if j >= n:
+                lines.append("".join(units[i:]))
+                break
+            nxt = units[j]
+            if len(nxt) == 1 and nxt in _CLOSING:
+                # 放不下的闭标点：如果它前后还连着闭标点（比如 。” 或 ……），
+                # 悬挂一个会把另一个留在行首（排版库一次最多只悬挂一个），
+                # 改成把行尾最后一个非标点字连同这串闭标点一起带到下一行；
+                # 单个闭标点就让它悬挂在行末，行保持排满
+                prev_closing = j > i and len(units[j - 1]) == 1 and units[j - 1] in _CLOSING
+                next_closing = j + 1 < n and len(units[j + 1]) == 1 and units[j + 1] in _CLOSING
+                if prev_closing or next_closing:
+                    k = j - 1
+                    while k > i and len(units[k]) == 1 and units[k] in _CLOSING:
+                        k -= 1
+                    end = k if k > i else j
+                else:
+                    end = j + 1  # 悬挂：把这个标点也算进本行（超宽一点）
+            else:
+                # 普通单元放不下，直接在这里断行；开标点也在这里断行，
+                # 让它去下一行开头
+                end = j
+        # 行末禁则：行尾不能是开标点，把它留到下一行开头
+        while end > i + 1 and len(units[end - 1]) == 1 and units[end - 1] in _OPENING:
+            end -= 1
+        lines.append("".join(units[i:end]))
+        i = end
+    return lines
 
 
 def beijing_today():
@@ -244,6 +377,17 @@ def build_pdf(date, articles, font_path, out_path):
         return False
     pdfmetrics.registerFont(TTFont("NotoSerifSC", font_path))
 
+    # 给排版库的禁则表打补丁：它自带的表是按日文列的，缺了中文全角标点
+    # （，。；：？！”’》这些）。预断行留出的悬挂标点偶尔会让一行超宽一点，
+    # 排版库二次断行时靠这张表把标点留在行末，而不是推到下一行行首。
+    # paragraph.py 是 import 绑定的名字，两个模块都要打。
+    from reportlab.lib import textsplit as _textsplit
+    import reportlab.platypus.paragraph as _paragraph_mod
+    _extra_cannot_start = "，；：？！”’》〉」』〗〕·…—～％%"
+    _patched = "".join(sorted(set(_textsplit.ALL_CANNOT_START) | set(_extra_cannot_start)))
+    _textsplit.ALL_CANNOT_START = _patched
+    _paragraph_mod.ALL_CANNOT_START = _patched
+
     black = HexColor("#000000")
     date_str = date.strftime("%Y-%m-%d")
     # 版面尺寸（按原版样例 PDF 实测）：
@@ -322,11 +466,25 @@ def build_pdf(date, articles, font_path, out_path):
             self.canv.line(self.x0, 9.5, self.x1, 9.5)
             self.canv.restoreState()
 
+    # 预断行用的宽度（pt）：正文栏 144 毫米；首行要减掉 24pt 首行缩进；
+    # 标题、作者、引用行按整页排，可用宽度是通栏 10 毫米到 200 毫米；
+    # 目录栏是整页减去左右各 25 毫米。
+    body_width_pt = 144 * mm
+    body_first_width_pt = body_width_pt - 24
+    full_width_pt = 566.93 - 28.35
+    toc_width_pt = A4[0] - 50 * mm
+
+    def para_lines(text, font_size, width, first_width=None):
+        """一段文字按中文习惯预先断行，再拼成排版库里的一段（行间用 <br/> 连起来），
+        两端对齐、居中这些还是由排版库按段落样式完成。"""
+        lines = split_lines(text, font_size, width, first_width)
+        return "<br/>".join(html.escape(line) for line in lines)
+
     story = []
     # 目录：按网站顺序连续编号，只列标题，不标页码；有正文的条目做成可点链接
     story.append(Paragraph("人民日报文章目录", toc_title_style))
     for i, (_, title, _, _, paragraphs) in enumerate(articles, 1):
-        text = f"{i}. {html.escape(title)}"
+        text = para_lines(f"{i}. {title}", 12, toc_width_pt)
         if paragraphs:
             text = f'<link href="#art{i}">{text}</link>'
         story.append(Paragraph(text, toc_item_style))
@@ -340,18 +498,18 @@ def build_pdf(date, articles, font_path, out_path):
         if i > 1:
             story.append(PageBreak())
         # 标题里放一个锚点，目录点进来就跳到这里
-        story.append(Paragraph(f'<a name="art{i}"/>{html.escape(title)}', title_style))
+        story.append(Paragraph(f'<a name="art{i}"/>{para_lines(title, 29, full_width_pt)}', title_style))
         if author:
-            story.append(Paragraph(html.escape(author), author_style))
+            story.append(Paragraph(para_lines(author, 10, full_width_pt), author_style))
         if citation:
-            story.append(Paragraph(html.escape(citation), citation_style))
+            story.append(Paragraph(para_lines(citation, 10, full_width_pt), citation_style))
         story.append(FullWidthRule(rule_left, 566.93 - frame_left_pt))
         for text in paragraphs:
             plain = text.replace(" ", "").replace("　", "")
             if len(plain) <= 22 and not any(c in text for c in "。！？；，：、…"):
-                story.append(Paragraph(html.escape(text), subhead_style))
+                story.append(Paragraph(para_lines(text, 12, body_width_pt), subhead_style))
             else:
-                story.append(Paragraph(html.escape(text), body_style))
+                story.append(Paragraph(para_lines(text, 12, body_width_pt, body_first_width_pt), body_style))
 
     doc.build(story)
     logging.info(f"文章汇总版 PDF 已生成：{out_path}")
