@@ -346,13 +346,14 @@ def fetch_all_articles(date):
     return articles
 
 
-def build_pdf(date, articles, font_path, out_path):
+def build_pdf(date, articles, font_path, out_path, subhead_font_path=None):
     """把文章列表生成 PDF，版面和之前的文章汇总版一致：
 
     - 没有封面，第一页就是目录：标题“人民日报文章目录”，条目按网站顺序连续编号，
       有正文的条目可以点、点进去跳到对应文章。
     - 正文每篇文章另起一页：标题大字居中，作者和引用行居中，横线下面是正文；
       正文宋体 12 号、段首空两格，右边留约 6 厘米空白当笔记区。
+    - 正文里没有标点、字又少的短行是小标题，单独一行、居中、用黑体（粗体）排。
     - 每页底下只写“第 x 页”。
     """
     from reportlab.lib.colors import HexColor
@@ -376,6 +377,14 @@ def build_pdf(date, articles, font_path, out_path):
         logging.error(f"找不到中文字体文件：{font_path}，请先下载 Noto Serif SC 再运行")
         return False
     pdfmetrics.registerFont(TTFont("NotoSerifSC", font_path))
+    # 小标题用黑体（Noto Sans SC 粗体）：给了字体文件就注册来用，没给就
+    # 退回宋体，不影响正文生成。
+    subhead_font = "NotoSerifSC"
+    if subhead_font_path and os.path.isfile(subhead_font_path):
+        pdfmetrics.registerFont(TTFont("NotoSansSC-Bold", subhead_font_path))
+        subhead_font = "NotoSansSC-Bold"
+    elif subhead_font_path:
+        logging.warning(f"找不到小标题字体文件：{subhead_font_path}，小标题改用宋体")
 
     # 给排版库的禁则表打补丁：它自带的表是按日文列的，缺了中文全角标点
     # （，。；：？！”’》这些）。预断行留出的悬挂标点偶尔会让一行超宽一点，
@@ -441,8 +450,9 @@ def build_pdf(date, articles, font_path, out_path):
     body_style = ParagraphStyle("正文", fontName="NotoSerifSC", fontSize=12, leading=21,
                                 alignment=TA_JUSTIFY, firstLineIndent=24, spaceAfter=8,
                                 wordWrap="CJK")
-    # 正文里没有标点、字又少的短行是小标题，居中排（比如“领航定向 驾驭发展全局创造新的历史伟业”）
-    subhead_style = ParagraphStyle("小标题", fontName="NotoSerifSC", fontSize=12, leading=21,
+    # 正文里没有标点、字又少的短行是小标题，单独一行、居中、用黑体排
+    # （比如“领航定向 驾驭发展全局创造新的历史伟业”）
+    subhead_style = ParagraphStyle("小标题", fontName=subhead_font, fontSize=12, leading=21,
                                    alignment=TA_CENTER, spaceBefore=6, spaceAfter=6,
                                    wordWrap="CJK")
 
@@ -544,6 +554,8 @@ def main():
                         help="指定日期，格式 YYYY-MM-DD；不指定则自动识别当天（报纸没出就回退到昨天）")
     parser.add_argument("--font", default="NotoSerifSC.ttf",
                         help="中文字体文件路径，默认当前目录下的 NotoSerifSC.ttf")
+    parser.add_argument("--subhead-font", default=None,
+                        help="小标题黑体文件路径，不指定则小标题用宋体")
     parser.add_argument("--out", default=None, help="输出 PDF 路径，不指定则按默认规则存放")
     parser.add_argument("--workers", type=int, default=10, help="同时下载文章的线程数，默认 10")
     args = parser.parse_args()
@@ -567,7 +579,7 @@ def main():
     date_str = date.strftime("%Y-%m-%d")
     out_path = args.out or os.path.join(OUTPUT_DIR, f"人民日报-{date_str}-文章汇总版.pdf")
     os.makedirs(os.path.dirname(out_path), exist_ok=True)
-    if not build_pdf(date, articles, args.font, out_path):
+    if not build_pdf(date, articles, args.font, out_path, args.subhead_font):
         return 1
     with_body = sum(1 for a in articles if a[4])
     logging.info(f"文章汇总版完成：{date_str}，目录 {len(articles)} 条、正文 {with_body} 篇")
