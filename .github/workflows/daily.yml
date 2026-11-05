@@ -30,6 +30,17 @@ jobs:
       - name: 抓取并合并当日 PDF（单次运行，不进死循环）
         run: python rmrb_download.py --once
 
+      - name: 下载中文字体（文章汇总版 PDF 排版用）
+        run: |
+          curl -sL "https://raw.githubusercontent.com/google/fonts/main/ofl/notosanssc/NotoSansSC%5Bwght%5D.ttf" -o NotoSansSC.ttf
+          ls -lh NotoSansSC.ttf
+
+      - name: 抓取当日文章并生成文章汇总版 PDF
+        # 文章汇总失败也不让整个任务停下来：完整版照样归档提交，
+        # 失败原因可以在这一步的日志里看到。
+        continue-on-error: true
+        run: python article_crawler.py --font NotoSansSC.ttf
+
       - name: 归档到 pdfs/ 并生成目录
         run: |
           set -e
@@ -40,6 +51,13 @@ jobs:
             date="$(echo "$f" | sed -E 's/.*-([0-9]{4}-[0-9]{2}-[0-9]{2})-完整版\.pdf/\1/')"
             cp "$f" "pdfs/${date}.pdf"
             echo "归档: $f -> pdfs/${date}.pdf"
+          done
+          # 文章汇总版输出在“人民日报下载/人民日报-YYYY-MM-DD-文章汇总版.pdf”
+          for f in 人民日报下载/人民日报-*-文章汇总版.pdf; do
+            [ -e "$f" ] || continue
+            date="$(echo "$f" | sed -E 's/.*-([0-9]{4}-[0-9]{2}-[0-9]{2})-文章汇总版\.pdf/\1/')"
+            cp "$f" "pdfs/${date}-article.pdf"
+            echo "归档: $f -> pdfs/${date}-article.pdf"
           done
           python generate_index.py
           ls -lh pdfs/
