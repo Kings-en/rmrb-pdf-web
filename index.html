@@ -40,6 +40,17 @@
   .download { background:var(--red); color:#fff; }
   .hint, .updated { color:var(--muted); font-size:13px; }
   .empty { text-align:center; color:var(--muted); padding:28px 10px; }
+  /* 平板和桌面：列表改两列，内容更密；手机保持单列不变 */
+  @media (min-width:640px) {
+    main { max-width:960px; }
+    .list { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+    .list li { margin-bottom:0; padding:12px; }
+    .item-actions { margin-top:10px; }
+    .item-actions a { padding:9px; }
+  }
+  @media (min-width:1024px) {
+    main { max-width:1080px; }
+  }
   footer { text-align:center; color:var(--muted); font-size:12px; padding:0 16px 24px; line-height:1.7; }
 </style>
 </head>
