@@ -40,6 +40,10 @@
   .download { background:var(--red); color:#fff; }
   .hint, .updated { color:var(--muted); font-size:13px; }
   .empty { text-align:center; color:var(--muted); padding:28px 10px; }
+  .pager { display:flex; gap:10px; align-items:center; justify-content:center; margin:2px 0 10px; }
+  .pager button { font-size:15px; padding:10px 18px; border:1px solid var(--red); background:#fff; color:var(--red); border-radius:10px; }
+  .pager button:disabled { opacity:.4; }
+  .page-info { font-size:14px; color:var(--muted); min-width:96px; text-align:center; }
   /* 平板和桌面：列表改两列，内容更密；手机保持单列不变 */
   @media (min-width:640px) {
     main { max-width:960px; }
@@ -79,6 +83,11 @@
   </section>
 
   <ul class="list" id="list"></ul>
+  <nav class="pager" id="pager">
+    <button type="button" id="page-prev">上一页</button>
+    <span class="page-info" id="page-info"></span>
+    <button type="button" id="page-next">下一页</button>
+  </nav>
   <p class="updated" id="updated"></p>
 </main>
 <footer>
@@ -90,6 +99,13 @@
   var listEl = document.getElementById('list');
   var dateInput = document.getElementById('date-input');
   var all = [];
+  // 分页：每页 10 条；shown 是当前要显示的列表（全部，或按日期筛选后）
+  var pageSize = 10;
+  var curPage = 1;
+  var shown = [];
+  var prevBtn = document.getElementById('page-prev');
+  var nextBtn = document.getElementById('page-next');
+  var pageInfo = document.getElementById('page-info');
 
   // 日期选择框默认填当天（北京时间），没选之前是灰色占位字，填上当天日期就正常显示了
   (function () {
@@ -166,12 +182,24 @@
     });
   }
   function render(entries) {
+    shown = entries;
+    curPage = 1;
+    renderPage();
+  }
+  function renderPage() {
+    var total = Math.max(1, Math.ceil(shown.length / pageSize));
+    if (curPage > total) curPage = total;
+    if (curPage < 1) curPage = 1;
     listEl.innerHTML = '';
-    if (!entries.length) {
+    if (!shown.length) {
       listEl.innerHTML = '<li class="empty">这一天还没有报纸，请换个日期试试。</li>';
+      pageInfo.textContent = '';
+      prevBtn.disabled = true;
+      nextBtn.disabled = true;
       return;
     }
-    entries.forEach(function (e) {
+    var start = (curPage - 1) * pageSize;
+    shown.slice(start, start + pageSize).forEach(function (e) {
       var li = document.createElement('li');
       li.innerHTML =
         '<div class="item-top"><span class="item-date"></span><span class="tag"></span></div>' +
@@ -189,7 +217,12 @@
       bindDownload(li.querySelector('.download'));
       listEl.appendChild(li);
     });
+    pageInfo.textContent = '第 ' + curPage + ' 页 / 共 ' + total + ' 页';
+    prevBtn.disabled = curPage <= 1;
+    nextBtn.disabled = curPage >= total;
   }
+  prevBtn.addEventListener('click', function () { if (curPage > 1) { curPage--; renderPage(); } });
+  nextBtn.addEventListener('click', function () { if (curPage < Math.ceil(shown.length / pageSize)) { curPage++; renderPage(); } });
   function showLatest(e) {
     document.getElementById('latest-date').textContent = fmtDate(e.date);
     document.getElementById('latest-meta').textContent = meta(e);
