@@ -1,7 +1,25 @@
 {
-  "generated_at": "2026-11-20 13:32",
+  "generated_at": "2026-11-21 13:26",
   "timezone": "Asia/Shanghai",
   "entries": [
+    {
+      "date": "2026-11-21",
+      "kind": "完整版",
+      "file": "https://file.aonote.cn/pdfs/2026-11-21.pdf",
+      "download": "https://file.aonote.cn/pdfs/2026-11-21.pdf?attname=2026-11-21.pdf",
+      "size_bytes": 21117461,
+      "size": "20.1 MB",
+      "pages": 8
+    },
+    {
+      "date": "2026-11-21",
+      "kind": "文章汇总版",
+      "file": "https://file.aonote.cn/pdfs/2026-11-21-article.pdf",
+      "download": "https://file.aonote.cn/pdfs/2026-11-21-article.pdf?attname=2026-11-21-article.pdf",
+      "size_bytes": 842455,
+      "size": "0.8 MB",
+      "pages": 80
+    },
     {
       "date": "2026-11-20",
       "kind": "完整版",
